@@ -478,9 +478,17 @@ def delete_submission(submission_id):
 @login_required
 @csrf_protect
 def flush_all_data():
-    """Delete all submissions and reset Excel file."""
+    """Delete all submissions and student data, then reset Excel file."""
+    from sqlalchemy import text
+
+    # Delete all submissions first (to satisfy foreign key constraints)
     Submission.query.delete()
+
+    # Delete all students
+    Student.query.delete()
+
     try:
+        # Reset Excel file with only headers
         wb = Workbook()
         ws = wb.active
         ws.title = 'Sheet1'
@@ -498,7 +506,7 @@ def flush_all_data():
 
     return jsonify({
         'success': True,
-        'message': 'All submissions cleared',
+        'message': 'All student data and submissions cleared',
         'stats': {
             'total_submissions': total_submissions,
             'total_students': total_students,
