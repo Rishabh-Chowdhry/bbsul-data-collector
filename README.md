@@ -54,7 +54,7 @@ BBSUL STUDENT DATA/
 ### Admin Access
 
 - **URL:** http://127.0.0.1:5000/admin/login
-- **Email:** rishabh@bbsul.edu.pk
+- **Email:** Abc@xyz.edu.pk
 - **Password:** abc1234
 
 Admin can:
