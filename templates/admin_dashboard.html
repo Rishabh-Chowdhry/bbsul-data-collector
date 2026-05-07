@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - BBSUL Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght=400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-gray-100">
+    <!-- Header -->
+    <nav class="bg-indigo-600 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold">BBSUL Admin Dashboard</h1>
+            <div class="flex items-center space-x-4">
+                <a href="{{ url_for('download_excel') }}" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg font-medium transition">
+                    Download Excel File
+                </a>
+                <button id="flushBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg font-medium transition">
+                    Flush All Data
+                </button>
+                <a href="{{ url_for('admin_logout') }}" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg font-medium transition">
+                    Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <div class="text-3xl font-bold text-indigo-600" id="stat-submissions">{{ submissions|length }}</div>
+                <p class="text-gray-600">Total Submissions</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <div class="text-3xl font-bold text-green-600" id="stat-students">{{ students|length }}</div>
+                <p class="text-gray-600">Registered Students</p>
+            </div>
+            <div class="bg-white rounded-xl shadow-md p-6">
+                {% set pending = students|length - submissions|length %}
+                <div class="text-3xl font-bold text-yellow-600" id="stat-pending">{{ pending }}</div>
+                <p class="text-gray-600">Pending Submissions</p>
+            </div>
+        </div>
+
+        <!-- Submissions Table -->
+        <div class="bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="px-6 py-4 border-b bg-gray-50 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-800">Student Submissions</h2>
+                <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium">{{ submissions|length }} records</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Roll No</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for submission in submissions %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap font-medium">{{ submission.student_name }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ submission.email or 'N/A' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ submission.phone_number or 'N/A' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">{{ submission.roll_no or 'N/A' }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission.submitted_at else 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <a href="#details-{{ submission.id }}" class="text-indigo-600 hover:text-indigo-900 font-medium">View</a>
+                                <button type="button" class="delete-btn text-red-600 hover:text-red-900 font-medium ml-2" data-submission-id="{{ submission.id }}">
+                                    Delete
+                                </button>
+                            </td>
+                        </tr>
+                        <!-- Expandable Details Row -->
+                        <tr id="details-{{ submission.id }}" class="hidden">
+                            <td colspan="6" class="px-6 py-4 bg-gray-50 border-t">
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div><span class="font-medium">Father Name:</span> {{ submission.father_name or 'N/A' }}</div>
+                                    <div><span class="font-medium">Gender:</span> {{ submission.gender or 'N/A' }}</div>
+                                    <div><span class="font-medium">DOB:</span> {{ submission.date_of_birth or 'N/A' }}</div>
+                                    <div><span class="font-medium">CNIC:</span> {{ submission.cnic_number or 'N/A' }}</div>
+                                    <div><span class="font-medium">Admission Date:</span> {{ submission.admission_date or 'N/A' }}</div>
+                                    <div><span class="font-medium">Nationality:</span> {{ submission.nationality or 'N/A' }}</div>
+                                    <div><span class="font-medium">Passport:</span> {{ submission.passport_number or 'N/A' }}</div>
+                                    <div><span class="font-medium">Domicile:</span> {{ submission.domicile_district or 'N/A' }}, {{ submission.domicile_province or 'N/A' }}</div>
+                                    <div><span class="font-medium">City:</span> {{ submission.city or 'N/A' }}</div>
+                                    <div><span class="font-medium">Mailing Address:</span> {{ submission.mailing_address or 'N/A' }}</div>
+                                    <div><span class="font-medium">SSC Degree:</span> {{ submission.ssc_degree_name or 'N/A' }}</div>
+                                    <div><span class="font-medium">SSC Board:</span> {{ submission.ssc_board_name or 'N/A' }}</div>
+                                    <div><span class="font-medium">SSC Total:</span> {{ submission.ssc_total_marks or 'N/A' }}</div>
+                                    <div><span class="font-medium">SSC Obtained:</span> {{ submission.ssc_obtained_marks or 'N/A' }}</div>
+                                    <div><span class="font-medium">HSSC Degree:</span> {{ submission.hssc_degree_name or 'N/A' }}</div>
+                                    <div><span class="font-medium">HSSC Nomenclature:</span> {{ submission.hssc_degree_nomenclature or 'N/A' }}</div>
+                                    <div><span class="font-medium">HSSC Board:</span> {{ submission.hssc_board_name or 'N/A' }}</div>
+                                    <div><span class="font-medium">HSSC Total:</span> {{ submission.hssc_total_marks or 'N/A' }}</div>
+                                    <div><span class="font-medium">HSSC Obtained:</span> {{ submission.hssc_obtained_marks or 'N/A' }}</div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    <!-- Auto-refresh stats script -->
+    <script>
+        // Fetch stats and update cards
+        function updateStats() {
+            fetch('/admin/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('stat-submissions').textContent = data.total_submissions;
+                    document.getElementById('stat-students').textContent = data.total_students;
+                    document.getElementById('stat-pending').textContent = data.pending_submissions;
+                    // Update badge
+                    document.querySelector('.bg-indigo-100.text-indigo-800').textContent = data.total_submissions + ' records';
+                })
+                .catch(err => console.error('Failed to update stats:', err));
+        }
+
+        // Flush all data via AJAX
+        document.getElementById('flushBtn').addEventListener('click', function() {
+            if (!confirm('Are you sure you want to delete ALL submissions? This cannot be undone.')) {
+                return;
+            }
+
+            fetch('{{ url_for("flush_all_data") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-Token': '{{ csrf_token() }}',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    updateStats();
+                    document.querySelector('tbody').innerHTML = '';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(err => {
+                console.error('Flush failed:', err);
+                alert('Failed to flush data.');
+            });
+        });
+        });
+
+        // Delete single submission via AJAX
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const row = this.closest('tr');
+                const submissionId = this.dataset.submissionId;
+
+                if (!confirm('Delete this submission?')) return;
+
+                fetch(`/admin/delete-submission/${submissionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRF-Token': '{{ csrf_token() }}',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        row.remove();
+                        const detailsRow = document.getElementById('details-' + submissionId);
+                        if (detailsRow) detailsRow.remove();
+                        updateStats();
+                    } else {
+                        alert('Delete failed: ' + data.message);
+                    }
+                })
+                .catch(err => {
+                    console.error('Delete failed:', err);
+                    alert('Failed to delete submission.');
+                });
+            });
+        });
+
+        // Update stats immediately on load and every 3 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStats();
+            setInterval(updateStats, 3000);
+        });
+    </script>
+</body>
+</html>
