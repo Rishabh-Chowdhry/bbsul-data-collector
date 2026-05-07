@@ -450,10 +450,14 @@ def delete_submission(submission_id):
     """Delete a single submission via AJAX."""
     submission = Submission.query.get_or_404(submission_id)
     db.session.delete(submission)
-    db.session.commit()
 
-    # Rebuild Excel
-    rebuild_excel()
+    try:
+        # Rebuild Excel first (reads current DB state, excluding this deletion)
+        rebuild_excel()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
     # Return current stats
     total_submissions = db.session.query(db.func.count(Submission.id)).scalar() or 0
@@ -476,13 +480,16 @@ def delete_submission(submission_id):
 def flush_all_data():
     """Delete all submissions and reset Excel file."""
     Submission.query.delete()
-    db.session.commit()
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = 'Sheet1'
-    ws.append(ExcelHandler.EXCEL_COLUMNS)
-    wb.save(app.config['EXCEL_OUTPUT'])
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Sheet1'
+        ws.append(ExcelHandler.EXCEL_COLUMNS)
+        wb.save(app.config['EXCEL_OUTPUT'])
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
 
     # Return updated stats
     total_submissions = db.session.query(db.func.count(Submission.id)).scalar() or 0
