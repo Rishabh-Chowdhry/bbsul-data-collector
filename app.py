@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 from openpyxl import load_workbook, Workbook
 from io import BytesIO
@@ -105,31 +106,31 @@ class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), nullable=False)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # Form fields matching Excel columns
+    # Form fields matching Excel columns - ALL MANDATORY
     student_name = db.Column(db.String(200), nullable=False)
-    father_name = db.Column(db.String(200), nullable=True)
-    gender = db.Column(db.String(20), nullable=True)
-    roll_no = db.Column(db.String(50), nullable=True)
-    admission_date = db.Column(db.String(50), nullable=True)
-    nationality = db.Column(db.String(100), nullable=True)
-    cnic_number = db.Column(db.String(50), nullable=True)
-    passport_number = db.Column(db.String(50), nullable=True)
-    date_of_birth = db.Column(db.String(50), nullable=True)
-    phone_number = db.Column(db.String(50), nullable=True)
-    email = db.Column(db.String(200), nullable=True)
-    domicile_district = db.Column(db.String(200), nullable=True)
-    domicile_province = db.Column(db.String(200), nullable=True)
-    mailing_address = db.Column(db.Text, nullable=True)
-    city = db.Column(db.String(200), nullable=True)
-    ssc_degree_name = db.Column(db.String(200), nullable=True)
-    ssc_board_name = db.Column(db.String(200), nullable=True)
-    ssc_total_marks = db.Column(db.String(50), nullable=True)
-    ssc_obtained_marks = db.Column(db.String(50), nullable=True)
-    hssc_degree_name = db.Column(db.String(200), nullable=True)
-    hssc_degree_nomenclature = db.Column(db.String(50), nullable=True)
-    hssc_board_name = db.Column(db.String(200), nullable=True)
-    hssc_total_marks = db.Column(db.String(50), nullable=True)
-    hssc_obtained_marks = db.Column(db.String(50), nullable=True)
+    father_name = db.Column(db.String(200), nullable=False)
+    gender = db.Column(db.String(20), nullable=False)
+    roll_no = db.Column(db.String(50), nullable=False)
+    admission_date = db.Column(db.String(50), nullable=False)
+    nationality = db.Column(db.String(100), nullable=False)
+    cnic_number = db.Column(db.String(50), nullable=False)
+    passport_number = db.Column(db.String(50), nullable=False)
+    date_of_birth = db.Column(db.String(50), nullable=False)
+    phone_number = db.Column(db.String(50), nullable=False)
+    email = db.Column(db.String(200), nullable=False)
+    domicile_district = db.Column(db.String(200), nullable=False)
+    domicile_province = db.Column(db.String(200), nullable=False)
+    mailing_address = db.Column(db.Text, nullable=False)
+    city = db.Column(db.String(200), nullable=False)
+    ssc_degree_name = db.Column(db.String(200), nullable=False)
+    ssc_board_name = db.Column(db.String(200), nullable=False)
+    ssc_total_marks = db.Column(db.String(50), nullable=False)
+    ssc_obtained_marks = db.Column(db.String(50), nullable=False)
+    hssc_degree_name = db.Column(db.String(200), nullable=False)
+    hssc_degree_nomenclature = db.Column(db.String(50), nullable=False)
+    hssc_board_name = db.Column(db.String(200), nullable=False)
+    hssc_total_marks = db.Column(db.String(50), nullable=False)
+    hssc_obtained_marks = db.Column(db.String(50), nullable=False)
 
 class Admin(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -305,11 +306,19 @@ def student_form():
         return render_template('already_submitted.html', student=student)
 
     if request.method == 'POST':
-        # Validate required fields
-        required_fields = ['student_name', 'hssc_degree_nomenclature']
-        missing = [f for f in required_fields if not request.form.get(f)]
+        # Validate ALL fields are now mandatory (24 fields)
+        all_fields = [
+            'student_name', 'father_name', 'gender', 'roll_no', 'admission_date',
+            'nationality', 'cnic_number', 'passport_number', 'date_of_birth',
+            'phone_number', 'email', 'domicile_district', 'domicile_province',
+            'mailing_address', 'city', 'ssc_degree_name', 'ssc_board_name',
+            'ssc_total_marks', 'ssc_obtained_marks', 'hssc_degree_name',
+            'hssc_degree_nomenclature', 'hssc_board_name', 'hssc_total_marks',
+            'hssc_obtained_marks'
+        ]
+        missing = [f for f in all_fields if not request.form.get(f, '').strip()]
         if missing:
-            flash(f'Required fields missing: {", ".join(missing)}', 'error')
+            flash(f'All fields are required. Missing: {", ".join(missing)}', 'error')
             return redirect(url_for('student_form'))
 
         # Create submission
@@ -508,17 +517,25 @@ def rebuild_excel():
 
 def init_db():
     with app.app_context():
-        # Check if we need to add unique constraint to submission table
+        # Check if migration needed (unique constraint or nullable fields)
         try:
             inspector = db.inspect(db.engine)
+            columns = inspector.get_columns('submission')
             constraints = inspector.get_unique_constraints('submission')
+
+            # Check unique constraint
             has_unique = any('student_id' in str(c['column_names']) for c in constraints)
 
-            if not has_unique:
-                print("Migrating database: Adding unique constraint to submission.student_id...")
+            # Check if any nullable columns exist (excluding id)
+            has_nullable = any(c['nullable'] for c in columns if c['name'] not in ('id', 'student_id', 'submitted_at'))
+
+            needs_migration = not has_unique or has_nullable
+
+            if needs_migration:
+                print("Migrating database: enforcing unique constraint and NOT NULL on all fields...")
                 migrate_submission_table()
             else:
-                print("Database schema is up to date.")
+                print("Database schema is up to date (all fields mandatory).")
         except Exception as e:
             # Table might not exist yet
             print(f"Schema check skipped: {e}")
@@ -533,46 +550,53 @@ def init_db():
             wb.save(app.config['EXCEL_OUTPUT'])
 
 def migrate_submission_table():
-    """Migrate submission table to add UNIQUE constraint on student_id."""
+    """Migrate submission table to add UNIQUE constraint and NOT NULL on all fields."""
     from sqlalchemy import text
 
-    # Fetch all existing submissions before migration
+    # Fetch all existing submissions
     submissions = Submission.query.all()
+    print(f"Migrating {len(submissions)} submissions...")
 
-    # Store data
+    # Helper to safely convert None to empty string
+    def safe(value):
+        return '' if value is None else str(value)
+
+    # Store data with defaults for NULL
     old_data = []
+    null_counts = {}
     for sub in submissions:
-        old_data.append({
+        row = {
             'id': sub.id,
             'student_id': sub.student_id,
             'submitted_at': sub.submitted_at,
-            'student_name': sub.student_name,
-            'father_name': sub.father_name,
-            'gender': sub.gender,
-            'roll_no': sub.roll_no,
-            'admission_date': sub.admission_date,
-            'nationality': sub.nationality,
-            'cnic_number': sub.cnic_number,
-            'passport_number': sub.passport_number,
-            'date_of_birth': sub.date_of_birth,
-            'phone_number': sub.phone_number,
-            'email': sub.email,
-            'domicile_district': sub.domicile_district,
-            'domicile_province': sub.domicile_province,
-            'mailing_address': sub.mailing_address,
-            'city': sub.city,
-            'ssc_degree_name': sub.ssc_degree_name,
-            'ssc_board_name': sub.ssc_board_name,
-            'ssc_total_marks': sub.ssc_total_marks,
-            'ssc_obtained_marks': sub.ssc_obtained_marks,
-            'hssc_degree_name': sub.hssc_degree_name,
-            'hssc_degree_nomenclature': sub.hssc_degree_nomenclature,
-            'hssc_board_name': sub.hssc_board_name,
-            'hssc_total_marks': sub.hssc_total_marks,
-            'hssc_obtained_marks': sub.hssc_obtained_marks,
-        })
+            'student_name': safe(sub.student_name),
+            'father_name': safe(sub.father_name),
+            'gender': safe(sub.gender),
+            'roll_no': safe(sub.roll_no),
+            'admission_date': safe(sub.admission_date),
+            'nationality': safe(sub.nationality),
+            'cnic_number': safe(sub.cnic_number),
+            'passport_number': safe(sub.passport_number),
+            'date_of_birth': safe(sub.date_of_birth),
+            'phone_number': safe(sub.phone_number),
+            'email': safe(sub.email),
+            'domicile_district': safe(sub.domicile_district),
+            'domicile_province': safe(sub.domicile_province),
+            'mailing_address': safe(sub.mailing_address),
+            'city': safe(sub.city),
+            'ssc_degree_name': safe(sub.ssc_degree_name),
+            'ssc_board_name': safe(sub.ssc_board_name),
+            'ssc_total_marks': safe(sub.ssc_total_marks),
+            'ssc_obtained_marks': safe(sub.ssc_obtained_marks),
+            'hssc_degree_name': safe(sub.hssc_degree_name),
+            'hssc_degree_nomenclature': safe(sub.hssc_degree_nomenclature),
+            'hssc_board_name': safe(sub.hssc_board_name),
+            'hssc_total_marks': safe(sub.hssc_total_marks),
+            'hssc_obtained_marks': safe(sub.hssc_obtained_marks),
+        }
+        old_data.append(row)
 
-    # Drop and recreate table with unique constraint
+    # Recreate table with all NOT NULL constraints
     with db.engine.connect() as conn:
         conn.execute(text("DROP TABLE IF EXISTS submission_new"))
         conn.execute(text("""
@@ -581,35 +605,35 @@ def migrate_submission_table():
                 student_id INTEGER NOT NULL UNIQUE,
                 submitted_at DATETIME,
                 student_name VARCHAR(200) NOT NULL,
-                father_name VARCHAR(200),
-                gender VARCHAR(20),
-                roll_no VARCHAR(50),
-                admission_date VARCHAR(50),
-                nationality VARCHAR(100),
-                cnic_number VARCHAR(50),
-                passport_number VARCHAR(50),
-                date_of_birth VARCHAR(50),
-                phone_number VARCHAR(50),
-                email VARCHAR(200),
-                domicile_district VARCHAR(200),
-                domicile_province VARCHAR(200),
-                mailing_address TEXT,
-                city VARCHAR(200),
-                ssc_degree_name VARCHAR(200),
-                ssc_board_name VARCHAR(200),
-                ssc_total_marks VARCHAR(50),
-                ssc_obtained_marks VARCHAR(50),
-                hssc_degree_name VARCHAR(200),
-                hssc_degree_nomenclature VARCHAR(50),
-                hssc_board_name VARCHAR(200),
-                hssc_total_marks VARCHAR(50),
-                hssc_obtained_marks VARCHAR(50),
+                father_name VARCHAR(200) NOT NULL,
+                gender VARCHAR(20) NOT NULL,
+                roll_no VARCHAR(50) NOT NULL,
+                admission_date VARCHAR(50) NOT NULL,
+                nationality VARCHAR(100) NOT NULL,
+                cnic_number VARCHAR(50) NOT NULL,
+                passport_number VARCHAR(50) NOT NULL,
+                date_of_birth VARCHAR(50) NOT NULL,
+                phone_number VARCHAR(50) NOT NULL,
+                email VARCHAR(200) NOT NULL,
+                domicile_district VARCHAR(200) NOT NULL,
+                domicile_province VARCHAR(200) NOT NULL,
+                mailing_address TEXT NOT NULL,
+                city VARCHAR(200) NOT NULL,
+                ssc_degree_name VARCHAR(200) NOT NULL,
+                ssc_board_name VARCHAR(200) NOT NULL,
+                ssc_total_marks VARCHAR(50) NOT NULL,
+                ssc_obtained_marks VARCHAR(50) NOT NULL,
+                hssc_degree_name VARCHAR(200) NOT NULL,
+                hssc_degree_nomenclature VARCHAR(50) NOT NULL,
+                hssc_board_name VARCHAR(200) NOT NULL,
+                hssc_total_marks VARCHAR(50) NOT NULL,
+                hssc_obtained_marks VARCHAR(50) NOT NULL,
                 FOREIGN KEY(student_id) REFERENCES student (id)
             )
         """))
         conn.commit()
 
-    # Re-insert data, keeping only first entry per student
+    # Re-insert data, keep first per student only
     seen = set()
     duplicate_count = 0
     for data in old_data:
@@ -638,15 +662,17 @@ def migrate_submission_table():
             conn.commit()
         seen.add(data['student_id'])
 
-    # Swap tables
+    # Replace table
     with db.engine.connect() as conn:
         conn.execute(text("DROP TABLE submission"))
         conn.execute(text("ALTER TABLE submission_new RENAME TO submission"))
         conn.commit()
 
+    print(f"Migration complete: {len(seen)} submissions migrated.")
     if duplicate_count > 0:
-        print(f"  Removed {duplicate_count} duplicate submissions.")
-        print("  Only the first submission per student was kept.")
+        print(f"  Removed {duplicate_count} duplicates.")
+    print("  All fields now mandatory (NOT NULL).")
+    print("  UNIQUE constraint on student_id enforced.")
 
 if __name__ == '__main__':
     init_db()
